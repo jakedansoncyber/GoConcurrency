@@ -1,4 +1,4 @@
-// #2
+// #3
 // Play around with concurrency before we implement it
 // inside of our actual application
 
@@ -18,7 +18,7 @@ func main() {
 	// add 2 tasks to wait on
 	wg.Add(2)
 	// recieve from channel
-	go func(ch chan int, wg *sync.WaitGroup) {
+	go func(ch <-chan int, wg *sync.WaitGroup) {
 		// printing a message from the channel
 		// <- indicates we are recieving the message from the channe;
 		fmt.Println(<-ch) // prints 42
@@ -27,7 +27,7 @@ func main() {
 	}(ch, wg)
 
 	// send to channel
-	go func(ch chan int, wg *sync.WaitGroup) {
+	go func(ch chan<- int, wg *sync.WaitGroup) {
 		// put the number 42 into the channel
 		ch <- 42
 		ch <- 27 // this fills the one space in our unbuffered channel

@@ -442,4 +442,16 @@ Channel types created in go:
 ch := make(chan int) // created channels are always bidirectional
 func myFunction(ch chan int) {...} // bidrectional channel
 func myFunction2(ch chan<- int) {...} // send-only channel
+func myFunction3(ch <-chan int) {...} // recieve-only channel
 ```
+
+### Closing Channels
+
+This is useful so that the sender can tell the reciever that we are no longer going to be sending messages so there is nothing to wait for.
+
+Closed buffer rules:
+- We cannot directly check to see if that channel is closed or not though. Sending a new message in a closed channel will trigger a panic.
+- Recieving messages are okay, but:
+    - If buffered, all buffered messages available
+    - If unbuffered, or buffer empty, receive zero-value
+- We can check to see if the channel is closed by using comma okay syntax to check (value, bool)
