@@ -285,6 +285,161 @@ We solved the problem where we had a race condtion by using mutexes.
 
 We still have a problem where the fmt.Println() function isn't thread safe, so we have to tackle that problem still.
 
-Example of not thread safe fmt.Println() printing "from database" in random places:
+Example of not thread safe fmt.Println() printing "from database" in random places and not before printing of the book:
 
 ![](./images/println-not-thread-safe.png)
+
+# Channels
+
+"Don't communicate by sharing memory, share memory by communicating" - Rob Pike
+
+As applications become very large, it can be difficult to protect memory shared by multiple go routines. So we can use channels to fix this.
+
+### Channels vs Mutexs
+
+- Channels:
+    - Generate copies of that memory and pass it along in our application
+        - One side of the channel will have a sender that will send a message into the channel
+        - Then it will be recieved on the other side by a go routine. But the recieved message will be a copy of the message instead of the original message itself so we are not using the same memroy.
+- Mutexs:
+    - Protect a certain section of memory so that only one operator can manipulate that memory at one time.
+
+The problems that WaitGroups, Mutexes and channels solve. Notice how channels solve both problems:
+![](./images/solving-concurrency-problems.png)
+
+### How Channels solve both problems:
+
+So all of the methods that we have talked about so far (WaitGroups, Mutexs) are just forms of communcation. They enable the go routines to have some sort of communication. 
+- WaitGroups solve the problem of the program ending before all other go routines have finished by basically having one go routine keep track of all the go routines.
+- Mutexs communicate by having a goroutine lock a piece of memory so that no one else can write to it. This go routine is telling other go routines that "you cannot access this memory, because I am"
+
+Channels are a litte different. You can think of a channel as the middle man between two go routines. One go routine passed a copy of their message to this channel and then the other go routine will pull that message off and use it elsewhere. This creates a scenario where go routines no longer have to manage the communication. They don't have to know about the other go routines, because they only have to know about the channel:
+
+![](./images/channel.png)
+
+### Create an unbuffered channel
+
+```go
+ ch := make(chan int)
+```
+
+Channels should always be passed in by function and not used locally.
+
+### Create an buffered channel
+
+```go
+// tells the capacity of the channel upfornt, the internal
+// capacity of 5
+ch:= make(chan int, 5)
+```
+
+Channels are blocking calls, so we must use go routines in order to access the send and recieve portions of our code.
+
+### Why we need go routines for send/recieve in channels
+
+Say we have code that looks like this:
+```go
+ch := make(chan int)
+
+fmt.Println(<-ch) // blocks on this line because we will be for waiting on a message forever
+ch <-42
+```
+
+Or even like this:
+
+```go
+ch := make(chan int)
+
+ch <-42 // blocks on this line as well
+fmt.Println(<-ch)
+```
+
+You might think that the second example should work, but we actually have the opposite problem as the first example. We CANNOT put in a message until there is a reciever waiting for the message. We are trying to push a message into the channel, but we can't because nothing is listening for it as we are blocked without go routines.
+
+You have to have a sender and reciever to be able to operate.
+
+### Unbuffered Channel In Action
+
+```go
+func main() {
+	// create waitgroup
+	wg := &sync.WaitGroup{}
+	// create channel
+	ch := make(chan int)
+
+	// add 2 tasks to wait on
+	wg.Add(2)
+	// recieve from channel
+	go func(ch chan int, wg *sync.WaitGroup) {
+		// printing a message from the channel
+		// <- indicates we are recieving the message from the channe;
+		fmt.Println(<-ch) // go routine sleeps here first
+		wg.Done() // finishes AFTER go routine from above awakes when a sender is sending a message over the channel!
+	}(ch, wg)
+
+	// send to channel
+	go func(ch chan int, wg *sync.WaitGroup) {
+		// put the number 42 into the channel
+		ch <- 42 // sends message since there is a reciever on the other end
+		wg.Done() // finish
+	}(ch, wg)
+	wg.Wait()
+}
+```
+
+So here we have a simple application that uses go routines to put a message on a channel and then a reciever that takes the message from the channel in an unbuffered way.
+
+The reason this now works is because when the first go routine trys to print the message from the channel, it notices that there is no sender on the other end of the channel. So it will fall alseep and the go run time will start another go routine to go to the next function. This next function will try to pass 42 into the channel and it notices that it in fact does have a reciever, so it will send the message over the channel and then this go routine will be done.
+
+So because of this, we can actually make our program send to channel first instead of receiving first. This means tjat order does not matter (for sending or recieving first), since the go routines will go to sleep and sort of await each other.
+
+TLDR: You can only send messages on a channel with an active reciever. In our current state, that means we can't send multiple messages at once. A situation like that calls for a buffered channel.
+
+### Simple Buffered Channel Example
+
+In this case, we only need to specify that we need 1 extra space in our buffered channel. The unbuffered channel naturally has zero extra spaces. So here is an example of storing one extra message in the buffer at the same time and then printing both messages.
+
+```go
+func main() {
+	// create waitgroup
+	wg := &sync.WaitGroup{}
+	// create channel & can have one message sitting in the channel
+	ch := make(chan int, 1)
+
+	// add 2 tasks to wait on
+	wg.Add(2)
+	// recieve from channel
+	go func(ch chan int, wg *sync.WaitGroup) {
+		// printing a message from the channel
+		// <- indicates we are recieving the message from the channe;
+		fmt.Println(<-ch) // prints 42
+		fmt.Println(<-ch) // prints 27
+		wg.Done()
+	}(ch, wg)
+
+	// send to channel
+	go func(ch chan int, wg *sync.WaitGroup) {
+		// put the number 42 into the channel
+		ch <- 42
+		ch <- 27 // this fills the one space in our unbuffered channel
+		wg.Done()
+	}(ch, wg)
+	wg.Wait()
+}
+```
+
+### Channel Types
+
+- Bidirection
+    - Created channels are always bidirectional
+- Send only
+- Recieve only
+
+We create a channel that is bidrectional, but inside our function, we can restrict which way we use this channel.
+
+Channel types created in go:
+```go
+ch := make(chan int) // created channels are always bidirectional
+func myFunction(ch chan int) {...} // bidrectional channel
+func myFunction2(ch chan<- int) {...} // send-only channel
+```
