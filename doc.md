@@ -72,6 +72,80 @@ func main() {
 ### Problems:
 
 We still have two main problems:
-- If we want to avoid go routines accessing the same memory we need to add mutexs. 
+- If we want to avoid go routines accessing the same memory we need to add mutexs. !!! Race Condition !!! 
 
 - fmt.Println() is NOT thread safe. So we must use another technique to solve this problem.
+
+# Mutexs
+
+A ***mut***ual ***ex***clusion lock. It used to protect portions of your code. We need to this protect memory access, so that only one go routine can access a piece of code at a time that access some memory. 
+
+Adding this will fix our race conditon we currently have in our program.
+
+We can spot our race condition by throwing the --race flag on a run.
+
+### Spot our race condition
+
+```bash
+# order of command matters!
+go run --race .
+```
+
+Output:
+
+```bash
+from database
+WARNING: DATA RACE
+Write at 0x00c0002800d8 by goroutine 17:
+  main.queryDatabase()
+      $PATH/LearnGoConcurrency/main.go:67 +0x104
+  main.main.func2()
+      $PATH/LearnGoConcurrency/main.go:35 +0x34
+  main.main.func4()
+      $PATH/LearnGoConcurrency/main.go:41 +0x54
+
+Previous write at 0x00c0002800d8 by goroutine 15:
+  main.queryDatabase()
+      $PATH/LearnGoConcurrency/main.go:67 +0x104
+  main.main.func2()
+      $PATH/LearnGoConcurrency/main.go:35 +0x34
+  main.main.func4()
+      $PATH/LearnGoConcurrency/main.go:41 +0x54
+
+Goroutine 17 (running) created at:
+  main.main()
+      $PATH/LearnGoConcurrency/main.go:33 +0x4c
+
+Goroutine 15 (running) created at:
+  main.main()
+      $PATH/LearnGoConcurrency/main.go:33 +0x4c
+==================
+Title:          "Running Low"
+Author:         "Oil Gasoline"
+Published:      1830
+
+from database
+from database
+Title:          "Running Low"
+Author:         "Oil Gasoline"
+Published:      1830
+
+Title:          "Bunion Onion"
+Author:         "Strawberry Pie"
+Published:      1410
+
+from database
+Title:          "Sloppy Shlop"
+Author:         "Shooter Mcgavin"
+Published:      1950
+
+from database
+Title:          "Cops"
+Author:         "Officer Toodles"
+Published:      1990
+
+Found 2 data race(s)
+exit status 66
+```
+
+This is an awesome tool that will spot race conditions in code! The amazing thing about it, is even if we put some time.Sleep() between a read & write of the same data, our program will appear to look just fine, but in reality it's still a race condition. This command will still spot this race condition!

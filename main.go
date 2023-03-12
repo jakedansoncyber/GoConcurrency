@@ -41,7 +41,6 @@ func main() {
 		}(id, waitGroup)
 		// If book not in cache then print (shouldn't hit this)
 		//fmt.Printf("Book not found with id: '%v'", id)
-		//time.Sleep(150 * time.Millisecond)
 	}
 
 	// wait for all tasks to be done
@@ -64,7 +63,7 @@ func queryDatabase(id int) (Book, bool) {
 		if book.ID == id {
 			// put the book in the cache
 			// ## Potential Shared Memory Problem! ##
-			//cache[id] = book // without mutexs go routines will try to write & access this cache at the same time (access the same memory)
+			cache[id] = book // without mutexs go routines will try to write & access this cache at the same time (access the same memory)
 			return book, true
 		}
 	}
