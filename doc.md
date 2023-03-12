@@ -149,3 +149,142 @@ exit status 66
 ```
 
 This is an awesome tool that will spot race conditions in code! The amazing thing about it, is even if we put some time.Sleep() between a read & write of the same data, our program will appear to look just fine, but in reality it's still a race condition. This command will still spot this race condition!
+
+### Solve the problem
+
+Introduce a new mutex object:
+
+```go
+mutex := *sync.Mutex()
+```
+
+Put the mutex.Lock & Unlock methods before a read & write call so that we don't run into a race condition.
+
+### Lock:
+
+```go
+// Lock a function so another routine can't access it
+mutex.Lock()
+```
+
+### Unlock:
+
+```go
+// Unlock a funtion once the go routine is done, so another
+// go routine can access it
+mutex.Unlock()
+```
+
+### In action:
+```go
+// returns a book & a bookean if exists
+func queryCache(id int, mutex *sync.Mutex) (Book, bool) {
+	mutex.Lock() // LOCK <------->
+	book, ok := cache[id]
+	mutex.Unlock() // UNLOCK <------->
+	return book, ok
+}
+
+func queryDatabase(id int, mutex *sync.Mutex) (Book, bool) {
+	// fake time it takes to query a database
+	time.Sleep(100 * time.Millisecond)
+
+	// iterate through slice of books defined 
+    // in book.go (fake database)
+	for _, book := range books {
+		// if book id is the same as id provided, means they are the same book...
+		if book.ID == id {
+			// put the book in the cache
+			mutex.Lock() // LOCK <------->
+			cache[id] = book // without mutexs go routines will try to write & access this cache at the same time (access the same memory)
+			mutex.Unlock() // UNLOCK <------->
+			return book, true
+		}
+	}
+
+	// else return an empty book & say false boolean
+	return Book{}, false
+}
+```
+
+These simple lock and unlock methods ensure that we aren't reading and writing to memory at the same time. We have effecitvely protected our shared memory.
+
+The important part though is that we are allowed to read from memory at the same time another go routine is reading from memory, because all we are doing is indexing the memory. This is not true for writing. We are changing the memory, so we cannot write at the same time that another go routine is writing to that same memory.
+
+SO, we are NOT allowed to 
+- read & write from same memory at the same time OR 
+- write & write from same memory at the same time.
+
+We ARE allowed to:
+- read & read from same memory
+
+In our code, we have innefficiencies. Technically, we will be reading from cache a whole lot more that we are writing to the cache, but in our code we are locking the read portion so that other go routines that are reading CANNOT access this memory. If we had a large application with many users, this would be a problem. 
+
+Lets fix it with read & write mutexs.
+
+### Read & Write Mutexs
+
+Introduce a new read write mutex object:
+
+```go
+mutex := *sync.RWMutex()
+```
+
+### Read Lock:
+
+```go
+// Lock a function so only read mutexs can access
+mutex.RLock()
+```
+
+### Read Unlock:
+
+```go
+// Unlock a funtion once the go routine is done, so another
+// write mutex can access
+mutex.RUnlock()
+```
+
+### Rework of queryCache() function:
+
+```go
+// returns a book & a bookean if exists
+func queryCache(id int, mutex *sync.RWMutex) (Book, bool) {
+	// READ LOCK -- Only reads can access at the same time
+    mutex.RLock() 
+	book, ok := cache[id]
+	mutex.RUnlock()
+	return book, ok
+}
+```
+
+### The queryDatabase function stays the same:
+
+Since we are writing to the shared memory in this function,
+we want to use the same mutex.Lock & mutex.Unlock methods.
+
+Essentially, we are using
+- mutex.Lock & mutex.Unlock for writes 
+- mutex.Rlock & mutex.RUnlock for reads
+
+### Word of caution
+
+RLock & RUnlock are a lot more complicated than the
+write Lock and Unlock methods. 
+
+This can cause performance issues if you don't need to use them. Only use Rlock & RUnlock when needed:
+
+- Use RLock & RUnlock when:
+    - You are doing a lot more reads than writes to the same memory
+- Use Lock & Unlock when:
+    - You are doing a balance of reads & writes to the same memory
+
+### Mutex Wrap Up
+
+We solved the problem where we had a race condtion by using mutexes.
+
+We still have a problem where the fmt.Println() function isn't thread safe, so we have to tackle that problem still.
+
+Example of not thread safe fmt.Println() printing "from database" in random places:
+
+![](./images/println-not-thread-safe.png)
