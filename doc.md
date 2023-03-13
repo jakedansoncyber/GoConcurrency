@@ -719,41 +719,38 @@ func main() {
 
 	// query database 10 times with each time querying a random id
 	for i := 0; i < 10; i++ {
-        // grab a random id
-        id := rnd.Intn(10) + 1
-        // Add the amount of tasks or go routines that are going to execute each time
-        waitGroup.Add(2)
-        // wrap if statement with anon func so we can call go routine
-        go func(id int, waitGroup *sync.WaitGroup, m *sync.RWMutex, ch chan<- Book) {
-            // query cache first; if id of book is in cache, grab it
-            if book, ok := queryCache(id, m); ok {
-                ch <- book
-            } else {
-                if book, ok := queryDatabase(id, m); ok {
-                    m.Lock()
-                    cache[id] = book
-                    m.Unlock()
-                    ch <- book
-                }
-            }
-            // tells the waitGroup that we created that this task is done
-            waitGroup.Done()
-        }(id, waitGroup, mutex, ch)
+		// grab a random id
+		id := rnd.Intn(10) + 1
+		// Add the amount of tasks or go routines that are going to execute each time
+		waitGroup.Add(2)
+		// wrap if statement with anon func so we can call go routine
+		go func(id int, waitGroup *sync.WaitGroup, m *sync.RWMutex, ch chan<- Book) {
+			// query cache first; if id of book is in cache, grab it
+			if book, ok := queryCache(id, m); ok {
+				ch <- book
+			} else {
+				if book, ok := queryDatabase(id, m); ok {
+					m.Lock()
+					cache[id] = book
+					m.Unlock()
+					ch <- book
+				}
+			}
+			// tells the waitGroup that we created that this task is done
+			waitGroup.Done()
+		}(id, waitGroup, mutex, ch)
 
-        // create on go routine per query to handle the response
-        go func(channel <-chan Book) {
-            select {
-            case book := <-channel:
-                fmt.Println(book)
-            }
-            waitGroup.Done()
-        }(ch)
-
-        waitGroup.Wait()
-    }
-
-    // wait for all tasks to be done
-
+		// create on go routine per query to handle the response
+		go func(channel <-chan Book) {
+			select { // using a select statement for something new, but not needed here
+			case book := <-channel:
+				fmt.Println(book)
+			}
+			waitGroup.Done()
+		}(ch)
+		// wait for all tasks to be done
+		waitGroup.Wait()
+	}
 }
 
 // returns a book & a bookean if exists
@@ -781,5 +778,8 @@ func queryDatabase(id int, mutex *sync.RWMutex) (Book, bool) {
 	}
 
 	// else return an empty book & say false boolean
+	return Book{}, false
+}
+
 	
 ```
