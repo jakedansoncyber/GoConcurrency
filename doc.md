@@ -91,7 +91,7 @@ We can spot our race condition by throwing the --race flag on a run.
 go run --race .
 ```
 
-Output:
+### Output:
 
 ```bash
 from database
@@ -295,7 +295,7 @@ Example of not thread safe fmt.Println() printing "from database" in random plac
 
 As applications become very large, it can be difficult to protect memory shared by multiple go routines. So we can use channels to fix this.
 
-### Channels vs Mutexs
+## Channels vs Mutexs
 
 - Channels:
     - Generate copies of that memory and pass it along in our application
@@ -307,7 +307,7 @@ As applications become very large, it can be difficult to protect memory shared 
 The problems that WaitGroups, Mutexes and channels solve. Notice how channels solve both problems:
 ![](./images/solving-concurrency-problems.png)
 
-### How Channels solve both problems:
+## How Channels solve both problems:
 
 So all of the methods that we have talked about so far (WaitGroups, Mutexs) are just forms of communcation. They enable the go routines to have some sort of communication. 
 - WaitGroups solve the problem of the program ending before all other go routines have finished by basically having one go routine keep track of all the go routines.
@@ -317,7 +317,7 @@ Channels are a litte different. You can think of a channel as the middle man bet
 
 ![](./images/channel.png)
 
-### Create an unbuffered channel
+## Create an unbuffered channel
 
 ```go
  ch := make(chan int)
@@ -325,7 +325,7 @@ Channels are a litte different. You can think of a channel as the middle man bet
 
 Channels should always be passed in by function and not used locally.
 
-### Create an buffered channel
+## Create an buffered channel
 
 ```go
 // tells the capacity of the channel upfornt, the internal
@@ -335,7 +335,7 @@ ch:= make(chan int, 5)
 
 Channels are blocking calls, so we must use go routines in order to access the send and recieve portions of our code.
 
-### Why we need go routines for send/recieve in channels
+## Why we need go routines for send/recieve in channels
 
 Say we have code that looks like this:
 ```go
@@ -358,7 +358,7 @@ You might think that the second example should work, but we actually have the op
 
 You have to have a sender and reciever to be able to operate.
 
-### Unbuffered Channel In Action
+## Unbuffered Channel In Action
 
 ```go
 func main() {
@@ -395,7 +395,7 @@ So because of this, we can actually make our program send to channel first inste
 
 TLDR: You can only send messages on a channel with an active reciever. In our current state, that means we can't send multiple messages at once. A situation like that calls for a buffered channel.
 
-### Simple Buffered Channel Example
+## Simple Buffered Channel Example
 
 In this case, we only need to specify that we need 1 extra space in our buffered channel. The unbuffered channel naturally has zero extra spaces. So here is an example of storing one extra message in the buffer at the same time and then printing both messages.
 
@@ -428,7 +428,7 @@ func main() {
 }
 ```
 
-### Channel Types
+## Channel Types
 
 - Bidirection
     - Created channels are always bidirectional
@@ -445,13 +445,332 @@ func myFunction2(ch chan<- int) {...} // send-only channel
 func myFunction3(ch <-chan int) {...} // recieve-only channel
 ```
 
-### Closing Channels
+## Closing Channels
 
 This is useful so that the sender can tell the reciever that we are no longer going to be sending messages so there is nothing to wait for.
 
-Closed buffer rules:
+Closed channel rules:
 - We cannot directly check to see if that channel is closed or not though. Sending a new message in a closed channel will trigger a panic.
 - Recieving messages are okay, but:
     - If buffered, all buffered messages available
     - If unbuffered, or buffer empty, receive zero-value
 - We can check to see if the channel is closed by using comma okay syntax to check (value, bool)
+- Can only close channels on a send, not a recieve
+To close a channel, simply:
+
+```go
+ch := make(chan int)
+
+close(ch) // close channel
+```
+
+### Example
+
+```go
+func main() {
+	// create waitgroup
+	wg := &sync.WaitGroup{}
+	// create channel & can have one message sitting in the channel
+	ch := make(chan int, 1)
+
+	// add 2 tasks to wait on
+	wg.Add(2)
+	// recieve from channel
+	go func(ch <-chan int, wg *sync.WaitGroup) {
+		// printing a message from the channel
+		// <- indicates we are recieving the message from the channe;
+		fmt.Println(<-ch) // prints 42
+		fmt.Println(<-ch) // prints 27
+
+		wg.Done()
+	}(ch, wg)
+
+	// send to channel
+	go func(ch chan<- int, wg *sync.WaitGroup) {
+		// put the number 42 into the channel
+		ch <- 42
+		//ch <- 27 // this fills the one space in our unbuffered channel
+		close(ch)
+		wg.Done()
+	}(ch, wg)
+	wg.Wait()
+}
+```
+
+Output:
+
+```bash
+42
+0
+```
+
+Lets look at the problem again where if we send something, we must recieve something (and vice versa). What we can actually do (with no real use case) is close a channel on another go routine that is trying to recieve some information. This will make it so that the recieving channel returns two values, a message and a boolean.
+
+### Example of returning expected value:
+
+```go
+func main() {
+	wg := &sync.WaitGroup{}
+	ch := make(chan int)
+
+	wg.Add(2)
+	// recieve
+	go func(ch <-chan int, wg *sync.WaitGroup) {
+		msg, ok := <-ch
+		fmt.Println(msg, ok)
+		wg.Done()
+	}(ch, wg)
+
+	// send
+	go func(ch chan<- int, wg *sync.WaitGroup) {
+		ch <- 20
+		wg.Done()
+	}(ch, wg)
+
+	wg.Wait()
+}
+```
+
+Output:
+
+```bash
+20 true
+```
+
+### Example of returning a zero unexpectedly on a closed channel:
+
+```go
+func main() {
+	wg := &sync.WaitGroup{}
+	ch := make(chan int)
+
+	wg.Add(2)
+	// recieve
+	go func(ch <-chan int, wg *sync.WaitGroup) {
+		msg, ok := <-ch
+		fmt.Println(msg, ok)
+		wg.Done()
+	}(ch, wg)
+
+	// send
+	go func(ch chan<- int, wg *sync.WaitGroup) {
+		close(ch) // UNEXPECTED CLOSE
+		wg.Done()
+	}(ch, wg)
+
+	wg.Wait()
+}
+```
+
+Output:
+
+```bash
+0 false
+```
+
+Overall, this allows us to kind of check to see if the channel is closed on the recieving end. It is also good to do this to make sure that if your list can actually contain a zero value, that is valuable so that we can check to see if the zero value is actually something that the closed channel returned or that the go routine sender sent (if it is an int). If the channel was of a different type, say string, then it would return the zero value of that type.
+
+We can then check to see if these values are because of a closed channel or from the actual message by using control flows.
+
+# Control Flow
+
+We will look at how Channels interact with control flows in go
+
+![](./images/control-flow.png)
+
+## If statement:
+
+Use an if statement to see if the channel was closed before using the message that was recieved from the channel (the reciever doesn't know if the channel was closed so we have to check):
+
+```go
+func main() {
+	wg := &sync.WaitGroup{}
+	ch := make(chan int)
+
+	wg.Add(2)
+
+	// recieve
+	go func(ch <-chan int, wg *sync.WaitGroup) {
+
+		// check channel with if statement
+		// if channel is not closed, print message
+		if msg, ok := <-ch; ok { // comma ok syntax!!
+			fmt.Println(msg, ok)
+		} else {
+			fmt.Println("The channel was closed and cannot be accessed from.")
+		}
+
+		wg.Done()
+	}(ch, wg)
+
+	// send
+	go func(ch chan<- int, wg *sync.WaitGroup) {
+		close(ch) // UNEXPECTED CLOSE
+		wg.Done()
+	}(ch, wg)
+
+	wg.Wait()
+}
+```
+### Output
+
+```bash
+The channel was closed and cannot be accessed from.
+```
+
+## For loops:
+
+My comments in the program basically say it all. If using a for in range style of for loop, we must make sure that we close the channel on the sending side.
+
+```go
+func main() {
+	wg := &sync.WaitGroup{}
+	ch := make(chan int)
+
+	wg.Add(2)
+	// recieve
+	go func(ch <-chan int, wg *sync.WaitGroup) {
+		// run a for each
+		// the sending function must close the channel when it is done though!
+		for msg := range ch {
+			fmt.Println(msg)
+		}
+		wg.Done()
+	}(ch, wg)
+
+	// send
+	go func(ch chan<- int, wg *sync.WaitGroup) {
+		for i := 0; i < 10; i++ {
+			ch <- i
+		}
+		close(ch) // must close here if: we are using the foreach & not explicitly telling how many interations in our for loop
+		wg.Done()
+	}(ch, wg)
+
+	wg.Wait()
+}
+```
+
+### Output
+
+```bash
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+```
+
+## Select Statement
+
+- Similar to switch statements, but they are specific to channels
+- Select statements differ by
+    -  instead of checking on a condition, we are actually doing to try and send or recieve messages
+    - There is no predetermined order of a select statement, if more than one case CAN be acted upon at the same time
+
+
+### Example without output
+
+```go
+ch1 := make(chan int)
+
+ch2 := make(chan string)
+
+select{
+    case i := <-ch1:
+
+    case ch2 <- "hello":
+
+    default:
+        // use default case for non-blocking select
+}
+```
+
+
+### Using all constructs together
+
+Here is the original main function that uses the books again. I optimized this to my liking, as the plural sight tutorial that I used for this program wanted to query the cache & database, even if the cache was hit. So I formatted the code to look like this, with the big note that I increased the fake delay for querying the database to make sure that the cache is working correctly as you can no longer know which data is coming fromt he cache or the database.
+
+```go
+func main() {
+
+	// create a wait group so we can await the go routines to finish
+	waitGroup := &sync.WaitGroup{}
+
+	// create a read write mutex to fix race conditions
+	mutex := &sync.RWMutex{}
+
+	ch := make(chan Book) // channel used for cached book objects
+	//dbCh := make(chan Book)    // channel used for db book objects
+
+	// query database 10 times with each time querying a random id
+	for i := 0; i < 10; i++ {
+		// grab a random id
+		id := rnd.Intn(10) + 1
+		// Add the amount of tasks or go routines that are going to execute each time
+		waitGroup.Add(2)
+		// wrap if statement with anon func so we can call go routine
+		go func(id int, waitGroup *sync.WaitGroup, m *sync.RWMutex, ch chan<- Book) {
+			// query cache first; if id of book is in cache, grab it
+			if book, ok := queryCache(id, m); ok {
+				ch <- book
+			} else {
+				if book, ok := queryDatabase(id, m); ok {
+					m.Lock()
+					cache[id] = book
+					m.Unlock()
+					ch <- book
+				}
+			}
+			// tells the waitGroup that we created that this task is done
+			waitGroup.Done()
+		}(id, waitGroup, mutex, ch)
+
+		// create on go routine per query to handle the response
+		go func(channel <-chan Book) {
+			select {
+			case book := <-channel:
+				fmt.Println(book)
+			}
+			waitGroup.Done()
+		}(ch)
+
+		waitGroup.Wait()
+	}
+
+	// wait for all tasks to be done
+
+}
+
+// returns a book & a bookean if exists
+func queryCache(id int, mutex *sync.RWMutex) (Book, bool) {
+	mutex.RLock()
+	book, ok := cache[id]
+	mutex.RUnlock()
+	return book, ok
+}
+
+func queryDatabase(id int, mutex *sync.RWMutex) (Book, bool) {
+	// fake time it takes to query a database
+	time.Sleep(3000 * time.Millisecond)
+
+	// iterate through slice of books defined in book.go
+	for _, book := range books {
+		// if book id is the same as id provided, means they are the same book...
+		if book.ID == id {
+			// put the book in the cache
+			mutex.Lock()
+			cache[id] = book // without mutexs go routines will try to write & access this cache at the same time (access the same memory)
+			mutex.Unlock()
+			return book, true
+		}
+	}
+
+	// else return an empty book & say false boolean
+	
+```

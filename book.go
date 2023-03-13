@@ -9,7 +9,7 @@ type Book struct {
 	YearPublished int
 }
 
-func (b Book) ToString() string {
+func (b Book) String() string {
 	return fmt.Sprintf(
 		"Title:\t\t%q\n"+
 			"Author:\t\t%q\n"+

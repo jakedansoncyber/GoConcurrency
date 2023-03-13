@@ -11,47 +11,57 @@ var cache = map[int]Book{}
 var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 func main() {
-
 	// create a wait group so we can await the go routines to finish
 	waitGroup := &sync.WaitGroup{}
 
 	// create a read write mutex to fix race conditions
 	mutex := &sync.RWMutex{}
 
-	ch := make(chan Book) // channel used for cached book objects
-	//dbCh := make(chan Book)    // channel used for db book objects
+	cacheCh := make(chan Book) // channel used for cached book objects
+	dbCh := make(chan Book)    // channel used for db book objects
 
 	// query database 10 times with each time querying a random id
 	for i := 0; i < 10; i++ {
 		// grab a random id
 		id := rnd.Intn(10) + 1
 		// Add the amount of tasks or go routines that are going to execute each time
-		waitGroup.Add(2)
+		waitGroup.Add(3)
 		// wrap if statement with anon func so we can call go routine
 		go func(id int, waitGroup *sync.WaitGroup, m *sync.RWMutex, ch chan<- Book) {
 			// query cache first; if id of book is in cache, grab it
-			if book, ok := queryCache(id, m); ok {
+			if book, ok := queryCache(id, mutex); ok {
 				ch <- book
-			} else {
-				if book, ok := queryDatabase(id, m); ok {
-					m.Lock()
-					cache[id] = book
-					m.Unlock()
-					ch <- book
-				}
 			}
 			// tells the waitGroup that we created that this task is done
 			waitGroup.Done()
-		}(id, waitGroup, mutex, ch)
+		}(id, waitGroup, mutex, cacheCh)
+
+		go func(id int, waitGroup *sync.WaitGroup, m *sync.RWMutex, ch chan<- Book) {
+			// query database if book is not in cache
+			if book, ok := queryDatabase(id, mutex); ok {
+				m.Lock()
+				cache[id] = book
+				m.Unlock()
+				ch <- book
+			}
+
+			// tells the waitGroup that we created that this task is done
+			waitGroup.Done()
+		}(id, waitGroup, mutex, dbCh)
 
 		// create on go routine per query to handle the response
-		go func(channel <-chan Book) {
+		go func(cacheCh, dbCh <-chan Book) {
 			select {
-			case book := <-channel:
+			case book := <-cacheCh:
+				fmt.Println("from cache")
+				fmt.Println(book)
+				<-dbCh // have to put this here to drain the db channel since it is always hit
+			case book := <-dbCh:
+				fmt.Println("from database")
 				fmt.Println(book)
 			}
 			waitGroup.Done()
-		}(ch)
+		}(cacheCh, dbCh)
 
 		waitGroup.Wait()
 	}
@@ -70,7 +80,7 @@ func queryCache(id int, mutex *sync.RWMutex) (Book, bool) {
 
 func queryDatabase(id int, mutex *sync.RWMutex) (Book, bool) {
 	// fake time it takes to query a database
-	time.Sleep(3000 * time.Millisecond)
+	time.Sleep(1000 * time.Millisecond)
 
 	// iterate through slice of books defined in book.go
 	for _, book := range books {

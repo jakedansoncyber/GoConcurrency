@@ -23,6 +23,7 @@ func main() {
 		// <- indicates we are recieving the message from the channe;
 		fmt.Println(<-ch) // prints 42
 		fmt.Println(<-ch) // prints 27
+
 		wg.Done()
 	}(ch, wg)
 
@@ -30,7 +31,8 @@ func main() {
 	go func(ch chan<- int, wg *sync.WaitGroup) {
 		// put the number 42 into the channel
 		ch <- 42
-		ch <- 27 // this fills the one space in our unbuffered channel
+		//ch <- 27 // this fills the one space in our unbuffered channel
+		close(ch)
 		wg.Done()
 	}(ch, wg)
 	wg.Wait()
