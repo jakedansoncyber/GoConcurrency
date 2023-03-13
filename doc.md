@@ -307,7 +307,7 @@ As applications become very large, it can be difficult to protect memory shared 
 - Channels:
     - Generate copies of that memory and pass it along in our application
         - One side of the channel will have a sender that will send a message into the channel
-        - Then it will be recieved on the other side by a go routine. But the recieved message will be a copy of the message instead of the original message itself so we are not using the same memroy.
+        - Then it will be recieved on the other side by a go routine. But the recieved message will be a copy of the message instead of the original message itself so we are not using the same memory.
 - Mutexs:
     - Protect a certain section of memory so that only one operator can manipulate that memory at one time.
 
