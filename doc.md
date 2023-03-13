@@ -1,3 +1,10 @@
+# Credits
+
+All of the learning done here was from the Concurrent Programming with Go
+by Mike Van Sickle Plural sight course. [You can find that here](https://app.pluralsight.com/library/courses/concurrent-programming-go/table-of-contents)
+
+Note though, my final product of the code is different than his final product. I didn't like a few things that he had -- it kind of felt like a bad ending to a movie where the movie didn't close the chapters on some of the left overs. I tried to do that myself so be warned.
+
 # Wait Groups
 
 We create a wait group, which is essentially a go routine that is there to track other go routines. This way we can wait on the go routines to finish before we end the program. This way there isn't any tasks trying to complete before the main function returns.
@@ -694,7 +701,9 @@ select{
 
 ### Using all constructs together
 
-Here is the original main function that uses the books again. I optimized this to my liking, as the plural sight tutorial that I used for this program wanted to query the cache & database, even if the cache was hit. So I formatted the code to look like this, with the big note that I increased the fake delay for querying the database to make sure that the cache is working correctly as you can no longer know which data is coming fromt he cache or the database.
+Here is the original main function that uses the books again. I optimized this to my liking, as the plural sight tutorial that I used for this program wanted to query the cache & database, even if the cache was hit. So I formatted the code to look like this, with the big note that I increased the fake delay for querying the database to make sure that the cache is working correctly as you can no longer know which data is coming from the cache or the database.
+
+The plural sight instructor's end program also contained a sleep function as well which I didn't like, so I refactored the code so I no longer needed to await the printing of the books.
 
 ```go
 func main() {
@@ -710,40 +719,40 @@ func main() {
 
 	// query database 10 times with each time querying a random id
 	for i := 0; i < 10; i++ {
-		// grab a random id
-		id := rnd.Intn(10) + 1
-		// Add the amount of tasks or go routines that are going to execute each time
-		waitGroup.Add(2)
-		// wrap if statement with anon func so we can call go routine
-		go func(id int, waitGroup *sync.WaitGroup, m *sync.RWMutex, ch chan<- Book) {
-			// query cache first; if id of book is in cache, grab it
-			if book, ok := queryCache(id, m); ok {
-				ch <- book
-			} else {
-				if book, ok := queryDatabase(id, m); ok {
-					m.Lock()
-					cache[id] = book
-					m.Unlock()
-					ch <- book
-				}
-			}
-			// tells the waitGroup that we created that this task is done
-			waitGroup.Done()
-		}(id, waitGroup, mutex, ch)
+        // grab a random id
+        id := rnd.Intn(10) + 1
+        // Add the amount of tasks or go routines that are going to execute each time
+        waitGroup.Add(2)
+        // wrap if statement with anon func so we can call go routine
+        go func(id int, waitGroup *sync.WaitGroup, m *sync.RWMutex, ch chan<- Book) {
+            // query cache first; if id of book is in cache, grab it
+            if book, ok := queryCache(id, m); ok {
+                ch <- book
+            } else {
+                if book, ok := queryDatabase(id, m); ok {
+                    m.Lock()
+                    cache[id] = book
+                    m.Unlock()
+                    ch <- book
+                }
+            }
+            // tells the waitGroup that we created that this task is done
+            waitGroup.Done()
+        }(id, waitGroup, mutex, ch)
 
-		// create on go routine per query to handle the response
-		go func(channel <-chan Book) {
-			select {
-			case book := <-channel:
-				fmt.Println(book)
-			}
-			waitGroup.Done()
-		}(ch)
+        // create on go routine per query to handle the response
+        go func(channel <-chan Book) {
+            select {
+            case book := <-channel:
+                fmt.Println(book)
+            }
+            waitGroup.Done()
+        }(ch)
 
-		waitGroup.Wait()
-	}
+        waitGroup.Wait()
+    }
 
-	// wait for all tasks to be done
+    // wait for all tasks to be done
 
 }
 
